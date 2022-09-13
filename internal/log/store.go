@@ -63,11 +63,11 @@ func (s *store) Read(pos uint64) (result []byte, err error) {
 	if _, err := s.File.ReadAt(size, int64(pos)); err != nil {
 		return nil, err
 	}
-	b := make([]byte, enc.Uint64(size))
-	if _, err := s.File.ReadAt(b, int64(pos+lenWidth)); err != nil {
+	data := make([]byte, enc.Uint64(size))
+	if _, err := s.File.ReadAt(data, int64(pos+lenWidth)); err != nil {
 		return nil, err
 	}
-	return b, nil
+	return data, nil
 }
 
 // Read len(p) byte into p beginning at the off offset in the file
