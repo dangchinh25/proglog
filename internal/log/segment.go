@@ -17,6 +17,7 @@ type segment struct {
 	config                 Config
 }
 
+// newSegment creates a new segment and setups its store and index
 func newSegment(dir string, baseOffset uint64, c Config) (*segment, error) {
 	s := &segment{
 		baseOffset: baseOffset,
@@ -54,6 +55,7 @@ func newSegment(dir string, baseOffset uint64, c Config) (*segment, error) {
 	return s, nil
 }
 
+// Append writes the record to the segment and returns the newly appended record's offset
 func (s *segment) Append(record *api.Record) (offset uint64, err error) {
 	curOffset := s.nextOffset
 	record.Offset = curOffset
@@ -76,6 +78,7 @@ func (s *segment) Append(record *api.Record) (offset uint64, err error) {
 	return curOffset, nil
 }
 
+// Read returns the record for the given offset
 func (s *segment) Read(off uint64) (*api.Record, error) {
 	_, pos, err := s.index.Read(int64(off - s.baseOffset))
 	if err != nil {
@@ -90,6 +93,7 @@ func (s *segment) Read(off uint64) (*api.Record, error) {
 	return record, err
 }
 
+// IsMaxed indicates whether the segment has reached its max size (max store of max index)
 func (s *segment) IsMaxed() bool {
 	return s.store.size >= s.config.Segment.MaxStoreBytes || s.index.size >= s.config.Segment.MaxIndexBytes
 }
