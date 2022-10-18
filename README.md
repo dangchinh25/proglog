@@ -15,3 +15,4 @@ E.g: if we have 2 entry entry0 and entry1, each consists of 8bytes. Then entry0 
 + Understand os.Truncate
 + Understand TLS and CA cert
 + Understand Casbin
++ Understand Serf
