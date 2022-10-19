@@ -20,6 +20,7 @@ type Membership struct {
 	logger  *zap.Logger
 }
 
+// New create a Membership with the required configuration and event handler
 func New(handler Handler, config Config) (*Membership, error) {
 	c := &Membership{
 		Config:  config,
