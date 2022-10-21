@@ -12,16 +12,25 @@ type Handler interface {
 	Leave(name string) error
 }
 
+// Config used for Serf setup
+type MembershipConfig struct {
+	NodeName       string            // Acts as the node's unique identifier across the Serf cluster
+	BindAddr       string            // Serf listens on this address for gossiping
+	Tags           map[string]string // Serf share these tags to other nodes inside the cluster, we sgare each node's user-configured RPC address so the nodes know which addresses to send their RPC
+	StartJoinAddrs []string          // Addresses of nodes in the cluster so that when new node join the cluster, it can auto discovery and connect with the other nodes
+}
+
+// Membership wraps around Serf to provide discovery and cluster membership to our service1
 type Membership struct {
-	Config
-	handler Handler
+	Config  MembershipConfig // Config to create a Serf cluster
+	handler Handler          // Handle that implement custom behavior when a node leaves or joins the cluster
 	serf    *serf.Serf
-	events  chan serf.Event
+	events  chan serf.Event // A channel to receive Serf's events when a node joins or leaves the cluster.
 	logger  *zap.Logger
 }
 
-// New create a Membership with the required configuration and event handler
-func New(handler Handler, config Config) (*Membership, error) {
+// NewMembership create a Membership with the required configuration and event handler
+func NewMembership(handler Handler, config MembershipConfig) (*Membership, error) {
 	c := &Membership{
 		Config:  config,
 		handler: handler,
@@ -34,15 +43,8 @@ func New(handler Handler, config Config) (*Membership, error) {
 	return c, nil
 }
 
-type Config struct {
-	NodeName       string
-	BindAddr       string
-	Tags           map[string]string
-	StartJoinAddrs []string
-}
-
 func (m *Membership) setupSerf() (err error) {
-	addr, err := net.ResolveTCPAddr("tcp", m.BindAddr)
+	addr, err := net.ResolveTCPAddr("tcp", m.Config.BindAddr)
 	if err != nil {
 		return err
 	}
@@ -53,7 +55,7 @@ func (m *Membership) setupSerf() (err error) {
 	config.MemberlistConfig.BindPort = addr.Port
 	m.events = make(chan serf.Event)
 	config.EventCh = m.events
-	config.Tags = m.Tags
+	config.Tags = m.Config.Tags
 	config.NodeName = m.Config.NodeName
 	m.serf, err = serf.Create(config)
 	if err != nil {
@@ -61,8 +63,8 @@ func (m *Membership) setupSerf() (err error) {
 	}
 	// Run eventHandler in the background
 	go m.eventHandler()
-	if m.StartJoinAddrs != nil {
-		_, err = m.serf.Join(m.StartJoinAddrs, true)
+	if m.Config.StartJoinAddrs != nil {
+		_, err = m.serf.Join(m.Config.StartJoinAddrs, true)
 		if err != nil {
 			return err
 		}

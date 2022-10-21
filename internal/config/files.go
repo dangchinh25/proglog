@@ -6,9 +6,9 @@ import (
 )
 
 var (
-	CAFile               = configFile("ca.pem")
-	ServerCertFile       = configFile("server.pem")
-	ServerKeyFile        = configFile("server-key.pem")
+	CAFile               = configFile("ca.pem")         // Root CA certificate
+	ServerCertFile       = configFile("server.pem")     // Local self-signed server certificate
+	ServerKeyFile        = configFile("server-key.pem") // Private key for server
 	RootClientCertFile   = configFile("root-client.pem")
 	RootClientKeyFile    = configFile("root-client-key.pem")
 	NobodyClientCertFile = configFile("nobody-client.pem")

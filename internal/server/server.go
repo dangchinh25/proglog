@@ -21,7 +21,7 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-type Config struct {
+type ServerConfig struct {
 	CommitLog  CommitLog
 	Authorizer Authorizer
 }
@@ -36,10 +36,10 @@ var _ api.LogServer = (*grpcServer)(nil)
 
 type grpcServer struct {
 	api.UnimplementedLogServer
-	*Config
+	*ServerConfig
 }
 
-func NewGRPCServer(config *Config, opts ...grpc.ServerOption) (*grpc.Server, error) {
+func NewGRPCServer(config *ServerConfig, opts ...grpc.ServerOption) (*grpc.Server, error) {
 	logger := zap.L().Named("server")
 	zapOpts := []grpc_zap.Option{
 		grpc_zap.WithDurationField(
@@ -81,9 +81,9 @@ func NewGRPCServer(config *Config, opts ...grpc.ServerOption) (*grpc.Server, err
 	return gsrv, nil
 }
 
-func newGrpcServer(config *Config) (srv *grpcServer, err error) {
+func newGrpcServer(config *ServerConfig) (srv *grpcServer, err error) {
 	srv = &grpcServer{
-		Config: config,
+		ServerConfig: config,
 	}
 	return srv, nil
 }

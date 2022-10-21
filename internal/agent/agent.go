@@ -18,31 +18,42 @@ import (
 
 // Agent runs on every service instance, setting and connecting all the different components.
 type Agent struct {
-	Config
+	Config AgentConfig // Wrap around all the component's config (CommitLog, Server, Membership, Replicator)
 
-	log        *log.Log
-	server     *grpc.Server
-	membership *discovery.Membership
-	replicator *log.Replicator
+	log        *log.Log              // CommitLog instance
+	server     *grpc.Server          // GRPC server instance
+	membership *discovery.Membership // Serf's membership instance
+	replicator *log.Replicator       // Replicator management instance
 
-	shutdown     bool
-	shutdowns    chan struct{}
-	showdownLock sync.Mutex
+	isShutdown   bool          // Indicate whether the current Agent cluster is shutdown
+	shutdowns    chan struct{} //
+	shutdownLock sync.Mutex
 }
 
-type Config struct {
-	ServerTLSConfig *tls.Config
-	PeerTLSConfig   *tls.Config
-	DataDir         string
-	BindAddr        string
-	RPCPort         int
-	NodeName        string
-	StartJoinAddrs  []string
-	ACLModeFile     string
-	ACLPolicyFile   string
+type AgentConfig struct {
+	// Config for server
+
+	ServerTLSConfig *tls.Config // Configuration that's served to clients
+	PeerTLSConfig   *tls.Config // Configuration for peer client to communicate internally between server
+
+	// Config for CommitLog
+
+	DataDir string // Location(path) to save commit log
+
+	// Config for Serf
+
+	NodeName       string   // Acts as the node's unique identifier across the Serf cluster
+	BindAddr       string   // Serf listens on this address for gossiping
+	RPCPort        int      // Combine with BindAdd to form a complete RPC address to create a connection to
+	StartJoinAddrs []string // Addresses of nodes in the cluster so that when new node join the cluster, it can auto discovery and connect with the other nodes
+
+	// Config for Authorizer
+
+	ACLModelFile  string // Path to model file to pass into Authorizer (Casbin)
+	ACLPolicyFile string // Path to policy file to pass into Authorizer (Casbin)
 }
 
-func (c Config) RPCAddr() (string, error) {
+func (c AgentConfig) RPCAddr() (string, error) {
 	host, _, err := net.SplitHostPort(c.BindAddr)
 	if err != nil {
 		return "", err
@@ -51,7 +62,7 @@ func (c Config) RPCAddr() (string, error) {
 }
 
 // New creates an Agent and runs a set of methods to set up and run the agent's components
-func New(config Config) (*Agent, error) {
+func NewAgent(config AgentConfig) (*Agent, error) {
 	a := &Agent{
 		Config:    config,
 		shutdowns: make(chan struct{}),
@@ -88,8 +99,8 @@ func (a *Agent) setupLog() error {
 }
 
 func (a *Agent) setupServer() error {
-	authorizer := auth.New(a.Config.ACLModeFile, a.Config.ACLPolicyFile)
-	serverConfig := &server.Config{
+	authorizer := auth.NewAuthorizer(a.Config.ACLModelFile, a.Config.ACLPolicyFile)
+	serverConfig := &server.ServerConfig{
 		CommitLog:  a.log,
 		Authorizer: authorizer,
 	}
@@ -103,7 +114,7 @@ func (a *Agent) setupServer() error {
 	if err != nil {
 		return err
 	}
-	rpcAddr, err := a.RPCAddr()
+	rpcAddr, err := a.Config.RPCAddr()
 	if err != nil {
 		return err
 	}
@@ -123,6 +134,7 @@ func (a *Agent) setupServer() error {
 // sets up a Replicator with the gRPC dial options needed to connect to other servers
 // and a client so the replicator can connect to other servers
 func (a *Agent) setupMembership() error {
+	// setup a peer client for Replicator
 	rpcAddr, err := a.Config.RPCAddr()
 	if err != nil {
 		return err
@@ -136,11 +148,12 @@ func (a *Agent) setupMembership() error {
 		return err
 	}
 	client := api.NewLogClient(conn)
+
 	a.replicator = &log.Replicator{
 		DialOptions: opts,
 		LocalServer: client,
 	}
-	a.membership, err = discovery.New(a.replicator, discovery.Config{
+	a.membership, err = discovery.NewMembership(a.replicator, discovery.MembershipConfig{
 		NodeName: a.Config.NodeName,
 		BindAddr: a.Config.BindAddr,
 		Tags: map[string]string{
@@ -157,12 +170,12 @@ func (a *Agent) setupMembership() error {
 // gracefully stopping the server,
 // closing the log.
 func (a *Agent) Shutdown() error {
-	a.showdownLock.Lock()
-	defer a.showdownLock.Unlock()
-	if a.shutdown {
+	a.shutdownLock.Lock()
+	defer a.shutdownLock.Unlock()
+	if a.isShutdown {
 		return nil
 	}
-	a.shutdown = true
+	a.isShutdown = true
 	close(a.shutdowns)
 
 	shutdown := []func() error{

@@ -10,6 +10,10 @@ Pos refers to the actual location of the entry in the file, representing by byte
 E.g: if we have 2 entry entry0 and entry1, each consists of 8bytes. Then entry0 would be at pos=0 and entry1 would be at pos=8
 
 ## Components
+### CommitLog
+
+### Server
+
 ### Membership
 - A component that handles server to server discovery using [Serf](https://www.serf.io/).
 - Every instance will be managed by a Serf cluster and whenever there is a new insance joining or leaving the cluster, Serf ensure that every other instance in the cluster knows about this.
@@ -33,3 +37,4 @@ E.g: if we have 2 entry entry0 and entry1, each consists of 8bytes. Then entry0 
 + Understand TLS and CA cert
 + Understand Casbin
 + Understand Serf
++ Review server and commit log implementation and add to README

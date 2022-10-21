@@ -42,7 +42,7 @@ func TestServer(t *testing.T) {
 		t *testing.T,
 		rootClient api.LogClient,
 		nobodyClient api.LogClient,
-		config *Config,
+		config *ServerConfig,
 	){
 		"produce/consume a message to/from the log succeeds": testProduceConsume,
 		"produce/consume streams succeeds":                   testProduceConsumeStream,
@@ -57,7 +57,7 @@ func TestServer(t *testing.T) {
 	}
 }
 
-func setupTest(t *testing.T, fn func(*Config)) (rootClient, nobodyClient api.LogClient, cfg *Config, teardown func()) {
+func setupTest(t *testing.T, fn func(*ServerConfig)) (rootClient, nobodyClient api.LogClient, cfg *ServerConfig, teardown func()) {
 	t.Helper()
 
 	httpListener, err := net.Listen("tcp", "127.0.0.1:0")
@@ -68,7 +68,7 @@ func setupTest(t *testing.T, fn func(*Config)) (rootClient, nobodyClient api.Log
 			CertFile: crtPath,
 			KeyFile:  keyPath,
 			CAFile:   config.CAFile,
-			Server:   false,
+			IsServer: false,
 		})
 		require.NoError(t, err)
 
@@ -88,7 +88,7 @@ func setupTest(t *testing.T, fn func(*Config)) (rootClient, nobodyClient api.Log
 		KeyFile:       config.ServerKeyFile,
 		CAFile:        config.CAFile,
 		ServerAddress: httpListener.Addr().String(),
-		Server:        true,
+		IsServer:      true,
 	})
 	require.NoError(t, err)
 	serverCreds := credentials.NewTLS(serverTLSConfig)
@@ -99,7 +99,7 @@ func setupTest(t *testing.T, fn func(*Config)) (rootClient, nobodyClient api.Log
 	clog, err := log.NewLog(testDir, log.Config{})
 	require.NoError(t, err)
 
-	authorizer := auth.New(config.ACLModelFile, config.ACLPolicyFile)
+	authorizer := auth.NewAuthorizer(config.ACLModelFile, config.ACLPolicyFile)
 
 	var telemetryExporter *exporter.LogExporter
 	if *debug {
@@ -121,7 +121,7 @@ func setupTest(t *testing.T, fn func(*Config)) (rootClient, nobodyClient api.Log
 		require.NoError(t, err)
 	}
 
-	cfg = &Config{
+	cfg = &ServerConfig{
 		CommitLog:  clog,
 		Authorizer: authorizer,
 	}
@@ -148,7 +148,7 @@ func setupTest(t *testing.T, fn func(*Config)) (rootClient, nobodyClient api.Log
 	}
 }
 
-func testProduceConsume(t *testing.T, client, _ api.LogClient, config *Config) {
+func testProduceConsume(t *testing.T, client, _ api.LogClient, config *ServerConfig) {
 	ctx := context.Background()
 	want := &api.Record{
 		Value: []byte("hello world"),
@@ -163,7 +163,7 @@ func testProduceConsume(t *testing.T, client, _ api.LogClient, config *Config) {
 	require.Equal(t, want.Offset, consume.Record.Offset)
 }
 
-func testConsumePastBoundary(t *testing.T, client, _ api.LogClient, config *Config) {
+func testConsumePastBoundary(t *testing.T, client, _ api.LogClient, config *ServerConfig) {
 	ctx := context.Background()
 
 	produce, err := client.Produce(ctx, &api.ProduceRequest{
@@ -184,7 +184,7 @@ func testConsumePastBoundary(t *testing.T, client, _ api.LogClient, config *Conf
 	}
 }
 
-func testProduceConsumeStream(t *testing.T, client, _ api.LogClient, config *Config) {
+func testProduceConsumeStream(t *testing.T, client, _ api.LogClient, config *ServerConfig) {
 	ctx := context.Background()
 
 	records := []*api.Record{
@@ -230,7 +230,7 @@ func testProduceConsumeStream(t *testing.T, client, _ api.LogClient, config *Con
 	}
 }
 
-func testUnauthorized(t *testing.T, _, client api.LogClient, config *Config) {
+func testUnauthorized(t *testing.T, _, client api.LogClient, config *ServerConfig) {
 	ctx := context.Background()
 	produce, err := client.Produce(ctx, &api.ProduceRequest{
 		Record: &api.Record{

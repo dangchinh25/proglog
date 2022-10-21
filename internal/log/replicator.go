@@ -10,15 +10,15 @@ import (
 )
 
 type Replicator struct {
-	DialOptions []grpc.DialOption
-	LocalServer api.LogClient
+	DialOptions []grpc.DialOption // Option to configure the client so it can authenticate with the other servers
+	LocalServer api.LogClient     // Client to connect (call the Produce function to save a copy of the mssage it consumes) and authenticate with other servers
 
 	logger *zap.Logger
 
-	mu      sync.Mutex
-	servers map[string]chan struct{}
-	closed  bool
-	close   chan struct{}
+	mu       sync.Mutex
+	servers  map[string]chan struct{} // Map of server address to a channel which will notify(receive new data) when a server leaves the cluster
+	isClosed bool                     // Indicate if the current server is closed
+	close    chan struct{}            // A channel that will receive new data (get notified) when the current replicator closes
 }
 
 // init lazily initialize the server map
@@ -41,7 +41,7 @@ func (r *Replicator) Join(name, addr string) error {
 	defer r.mu.Unlock()
 	r.init()
 
-	if r.closed {
+	if r.isClosed {
 		return nil
 	}
 	if _, ok := r.servers[name]; ok {
@@ -123,10 +123,10 @@ func (r *Replicator) Close() error {
 	defer r.mu.Unlock()
 	r.init()
 
-	if r.closed {
+	if r.isClosed {
 		return nil
 	}
-	r.closed = true
+	r.isClosed = true
 	close(r.close)
 	return nil
 }
