@@ -1,6 +1,13 @@
 package log
 
+import "github.com/hashicorp/raft"
+
 type LogConfig struct {
+	Raft struct {
+		raft.Config
+		StreamLayer *StreamLayer
+		Bootstrap   bool
+	}
 	Segment struct {
 		MaxStoreBytes uint64
 		MaxIndexBytes uint64
