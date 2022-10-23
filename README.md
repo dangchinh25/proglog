@@ -11,6 +11,13 @@ E.g: if we have 2 entry entry0 and entry1, each consists of 8bytes. Then entry0 
 
 ## Components
 ### CommitLog
+- Consists of 4 components: **Store** and **Index** as the core, with **Segment** wrapped around, and **Log** as the outermost component
+    - **Store** is the most important component where it has a pointer to a file where the actual data(records) is saved.
+    - **Index** is used to speed up read operation, where it holds pairs of *offset* and *position* so we can jump straight to the actual record's location instead of having to iterate through the file. **Store** and **Index** go in pair, so if one is full, then both get replaced.
+    - **Segment** is an abstraction around **Store** and **Index**, each **Segment** only have 1 pair of **Store** and **Index**. Whenever we need to interact(create/append/read/delete/etc) with **Store** and **Index**, we can use the **Segment** so that we only have to interact with 1 entity instead of 2.
+    - **Log** manages a list of **Segments**, consist of a list of *old segment* and 1 *active segment* where data is actively being written to. When the **Store** or **Index** that the active segment manages is full (reach the pre-configured size), the **Log** will handle create a new **Segment**(with new **Store** and **Index**) and assign that new one as the *active segment* while the previous one got pushed into the list of *old segment*. Each **Segment** holds a varible *baseOffset* where the **Log** can use to determine which **Segment** to read from.
+
+<img src="./asset/log.svg">
 
 ### Server
 
@@ -37,4 +44,4 @@ E.g: if we have 2 entry entry0 and entry1, each consists of 8bytes. Then entry0 
 + Understand TLS and CA cert
 + Understand Casbin
 + Understand Serf
-+ Review server and commit log implementation and add to README
++ Review server implementation and add to README

@@ -16,14 +16,14 @@ import (
 type Log struct {
 	mu     sync.RWMutex
 	Dir    string
-	Config Config
+	Config LogConfig
 
 	activeSegment *segment
 	segments      []*segment
 }
 
 // NewLog creates a new log instance that wraps around segment, index, and store
-func NewLog(dir string, c Config) (*Log, error) {
+func NewLog(dir string, c LogConfig) (*Log, error) {
 	if c.Segment.MaxStoreBytes == 0 {
 		c.Segment.MaxStoreBytes = 1024
 	}
@@ -53,13 +53,13 @@ func (l *Log) setup() error {
 		return baseOffsets[i] < baseOffsets[j]
 	})
 	for i := 0; i < len(baseOffsets); i++ {
-		if err = l.newSegment(baseOffsets[i]); err != nil {
+		if err = l.newActiveSegment(baseOffsets[i]); err != nil {
 			return err
 		}
 		i++
 	}
 	if l.segments == nil {
-		if err = l.newSegment(l.Config.Segment.InitialOffset); err != nil {
+		if err = l.newActiveSegment(l.Config.Segment.InitialOffset); err != nil {
 			return err
 		}
 	}
@@ -67,7 +67,7 @@ func (l *Log) setup() error {
 }
 
 // newSegment creates a new segment, appends that segment to the log's slice of segment and make the new segment the active segment
-func (l *Log) newSegment(off uint64) error {
+func (l *Log) newActiveSegment(off uint64) error {
 	s, err := newSegment(l.Dir, off, l.Config)
 	if err != nil {
 		return err
@@ -87,7 +87,7 @@ func (l *Log) Append(record *api.Record) (uint64, error) {
 		return 0, err
 	}
 	if l.activeSegment.IsMaxed() {
-		err = l.newSegment(off + 1)
+		err = l.newActiveSegment(off + 1)
 	}
 	return off, err
 }

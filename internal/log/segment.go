@@ -14,11 +14,11 @@ type segment struct {
 	store                  *store
 	index                  *index
 	baseOffset, nextOffset uint64
-	config                 Config
+	config                 LogConfig
 }
 
 // newSegment creates a new segment and setups its store and index
-func newSegment(dir string, baseOffset uint64, c Config) (*segment, error) {
+func newSegment(dir string, baseOffset uint64, c LogConfig) (*segment, error) {
 	s := &segment{
 		baseOffset: baseOffset,
 		config:     c,
@@ -55,7 +55,7 @@ func newSegment(dir string, baseOffset uint64, c Config) (*segment, error) {
 	return s, nil
 }
 
-// Append writes the record to the segment and returns the newly appended record's offset
+// Append writes the record to the segment's store and index and returns the newly appended record's offset
 func (s *segment) Append(record *api.Record) (offset uint64, err error) {
 	curOffset := s.nextOffset
 	record.Offset = curOffset

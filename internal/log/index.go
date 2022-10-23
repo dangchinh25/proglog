@@ -19,7 +19,7 @@ type index struct {
 	size uint64
 }
 
-func newIndex(f *os.File, c Config) (*index, error) {
+func newIndex(f *os.File, c LogConfig) (*index, error) {
 	idx := &index{
 		file: f,
 	}

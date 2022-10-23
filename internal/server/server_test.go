@@ -96,7 +96,7 @@ func setupTest(t *testing.T, fn func(*ServerConfig)) (rootClient, nobodyClient a
 	testDir, err := ioutil.TempDir("", "server-test")
 	require.NoError(t, err)
 
-	clog, err := log.NewLog(testDir, log.Config{})
+	clog, err := log.NewLog(testDir, log.LogConfig{})
 	require.NoError(t, err)
 
 	authorizer := auth.NewAuthorizer(config.ACLModelFile, config.ACLPolicyFile)

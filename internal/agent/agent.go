@@ -93,7 +93,7 @@ func (a *Agent) setupLogger() error {
 
 func (a *Agent) setupLog() error {
 	var err error
-	a.log, err = log.NewLog(a.Config.DataDir, log.Config{})
+	a.log, err = log.NewLog(a.Config.DataDir, log.LogConfig{})
 
 	return err
 }
