@@ -64,6 +64,7 @@ func TestAgent(t *testing.T) {
 			ACLPolicyFile:   config.ACLPolicyFile,
 			ServerTLSConfig: serverTLSConfig,
 			PeerTLSConfig:   peerTLSConfig,
+			Bootstrap:       i == 0,
 		})
 		require.NoError(t, err)
 
@@ -112,17 +113,17 @@ func TestAgent(t *testing.T) {
 	require.Equal(t, consumeResponse.Record.Value, []byte("foo"))
 
 	// This piece of code test that the server will replicate each other in a cycle
-	// consumeResponse, err = leaderClient.Consume(
-	// 	context.Background(),
-	// 	&api.ConsumeRequest{
-	// 		Offset: produceResponse.Offset + 1,
-	// 	},
-	// )
-	// require.Nil(t, consumeResponse)
-	// require.Error(t, err)
-	// got := grpc.Code(err)
-	// want := grpc.Code(api.ErrOffsetOutOfRange{}.GRPCStatus().Err())
-	// require.Equal(t, got, want)
+	consumeResponse, err = leaderClient.Consume(
+		context.Background(),
+		&api.ConsumeRequest{
+			Offset: produceResponse.Offset + 1,
+		},
+	)
+	require.Nil(t, consumeResponse)
+	require.Error(t, err)
+	got := grpc.Code(err)
+	want := grpc.Code(api.ErrOffsetOutOfRange{}.GRPCStatus().Err())
+	require.Equal(t, got, want)
 }
 
 // Create a mock client with given tlsConfig

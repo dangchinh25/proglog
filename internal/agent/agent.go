@@ -1,16 +1,20 @@
 package agent
 
 import (
+	"bytes"
 	"crypto/tls"
-	api "dangchinh25/proglog/api/v1"
 	"dangchinh25/proglog/internal/auth"
 	"dangchinh25/proglog/internal/discovery"
 	"dangchinh25/proglog/internal/log"
 	"dangchinh25/proglog/internal/server"
 	"fmt"
+	"io"
 	"net"
 	"sync"
+	"time"
 
+	"github.com/hashicorp/raft"
+	"github.com/soheilhy/cmux"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -20,10 +24,10 @@ import (
 type Agent struct {
 	Config AgentConfig // Wrap around all the component's config (CommitLog, Server, Membership, Replicator)
 
-	log        *log.Log              // CommitLog instance
+	mux        cmux.CMux
+	log        *log.DistributedLog   // CommitLog instance
 	server     *grpc.Server          // GRPC server instance
 	membership *discovery.Membership // Serf's membership instance
-	replicator *log.Replicator       // Replicator management instance
 
 	isShutdown   bool          // Indicate whether the current Agent cluster is shutdown
 	shutdowns    chan struct{} //
@@ -51,6 +55,8 @@ type AgentConfig struct {
 
 	ACLModelFile  string // Path to model file to pass into Authorizer (Casbin)
 	ACLPolicyFile string // Path to policy file to pass into Authorizer (Casbin)
+
+	Bootstrap bool
 }
 
 func (c AgentConfig) RPCAddr() (string, error) {
@@ -69,6 +75,7 @@ func NewAgent(config AgentConfig) (*Agent, error) {
 	}
 	setup := []func() error{
 		a.setupLogger,
+		a.setupMux,
 		a.setupLog,
 		a.setupServer,
 		a.setupMembership,
@@ -79,7 +86,21 @@ func NewAgent(config AgentConfig) (*Agent, error) {
 		}
 	}
 
+	go a.serve()
+
 	return a, nil
+}
+
+// creates a listener on RPC address that'll accept both Raft and gRPC connections and then creates a mux with the listener
+func (a *Agent) setupMux() error {
+	rpcAddr := fmt.Sprintf(":%d", a.Config.RPCPort)
+	ln, err := net.Listen("tcp", rpcAddr)
+	if err != nil {
+		return err
+	}
+	a.mux = cmux.New(ln)
+
+	return nil
 }
 
 func (a *Agent) setupLogger() error {
@@ -91,10 +112,37 @@ func (a *Agent) setupLogger() error {
 	return nil
 }
 
+// configure the DistributedLog's Raft to use multiplexer listenr and create the distributed log
 func (a *Agent) setupLog() error {
-	var err error
-	a.log, err = log.NewLog(a.Config.DataDir, log.LogConfig{})
+	// Identify Raft connections by reading 1 byte and check that the byte matches the one we setup in Dial() method in StreamLayer
+	// if the mux matches this rule, it will pass the connection the listener to handle the connection
+	raftLn := a.mux.Match(func(reader io.Reader) bool {
+		b := make([]byte, 1)
+		if _, err := reader.Read(b); err != nil {
+			return false
+		}
+		return bytes.Compare(b, []byte{byte(log.RaftRPC)}) == 0
+	})
 
+	logConfig := log.LogConfig{}
+	logConfig.Raft.StreamLayer = log.NewStreamLayer(
+		raftLn,
+		a.Config.ServerTLSConfig,
+		a.Config.PeerTLSConfig,
+	)
+	logConfig.Raft.LocalID = raft.ServerID(a.Config.NodeName)
+	logConfig.Raft.Bootstrap = a.Config.Bootstrap
+	var err error
+	a.log, err = log.NewDistributedLog(
+		a.Config.DataDir,
+		logConfig,
+	)
+	if err != nil {
+		return err
+	}
+	if a.Config.Bootstrap {
+		err = a.log.WaitForLeader(3 * time.Second)
+	}
 	return err
 }
 
@@ -114,16 +162,9 @@ func (a *Agent) setupServer() error {
 	if err != nil {
 		return err
 	}
-	rpcAddr, err := a.Config.RPCAddr()
-	if err != nil {
-		return err
-	}
-	httpListener, err := net.Listen("tcp", rpcAddr)
-	if err != nil {
-		return err
-	}
+	grpcLn := a.mux.Match(cmux.Any())
 	go func() {
-		if err := a.server.Serve(httpListener); err != nil {
+		if err := a.server.Serve(grpcLn); err != nil {
 			_ = a.Shutdown()
 		}
 	}()
@@ -139,21 +180,8 @@ func (a *Agent) setupMembership() error {
 	if err != nil {
 		return err
 	}
-	var opts []grpc.DialOption
-	if a.Config.PeerTLSConfig != nil {
-		opts = append(opts, grpc.WithTransportCredentials(credentials.NewTLS(a.Config.PeerTLSConfig)))
-	}
-	conn, err := grpc.Dial(rpcAddr, opts...)
-	if err != nil {
-		return err
-	}
-	client := api.NewLogClient(conn)
 
-	a.replicator = &log.Replicator{
-		DialOptions: opts,
-		LocalServer: client,
-	}
-	a.membership, err = discovery.NewMembership(a.replicator, discovery.MembershipConfig{
+	a.membership, err = discovery.NewMembership(a.log, discovery.MembershipConfig{
 		NodeName: a.Config.NodeName,
 		BindAddr: a.Config.BindAddr,
 		Tags: map[string]string{
@@ -180,7 +208,6 @@ func (a *Agent) Shutdown() error {
 
 	shutdown := []func() error{
 		a.membership.Leave,
-		a.replicator.Close,
 		func() error {
 			a.server.GracefulStop()
 			return nil
@@ -194,5 +221,14 @@ func (a *Agent) Shutdown() error {
 		}
 	}
 
+	return nil
+}
+
+// serve the connection by mux
+func (a *Agent) serve() error {
+	if err := a.mux.Serve(); err != nil {
+		_ = a.Shutdown()
+		return err
+	}
 	return nil
 }

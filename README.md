@@ -24,24 +24,30 @@ E.g: if we have 2 entry entry0 and entry1, each consists of 8bytes. Then entry0 
 ### Membership
 - A component that handles server to server discovery using [Serf](https://www.serf.io/).
 - Every instance will be managed by a Serf cluster and whenever there is a new insance joining or leaving the cluster, Serf ensure that every other instance in the cluster knows about this.
+- Each Serf instace uses the *startJoinAddrs* to determine which cluster to join.
 - Every instance in the cluster knows about the current state of the cluster (number of current working instance, which instance just joined/left, etc) at all times.
 - The below flow demonstrate the flow used in [unit test](./internal//discovery//membership_test.go).
 <img src="./asset/membership.svg">
 
-### Replicator
-- We store multiple copies of the log data when we have multiple servers in a Serf cluster, making our servcies more resillient to failures.
-- When servers discover other servers, we want to trigger the servers to replicate.
-- Our replication will be pull-based, with the replication component consuming from each discovered server and producing a copy to the local server.
+### Raft/Distributed Log
+- We use **Raft** to create a *leader/follower* relationship between multiple servers.
+     - The leader will be the one actively listening and executing request
+     - All the follower will just replicate/store the request received from the leader without doing any actual work.
+     - When the leader is lost, all the follower will start a leader election process to vote a new leader.
+- We create a **DistributedLog** components that wraps around our **CommitLog** and **Raft**.
+<img src="./asset/distributed.svg">
+- There more components in **Raft** such as *Snapshot*, *StableStore*, *StreamLayer*, *Transport* but the diagram only depicts the main execution flow (this is what happens during the *raft.Apply()* method).
+- The **DistributedLog** component also acts a *Serf handler*, which implements the *Join* and *Leave* method, [here](./internal/log/distributed.go).
+    - So whenever **Serf** receives a *Join* event telling that a new node just joined the cluster, it will notify back to **Raft** to start the *leader election* and *log replication* process. 
 
 ### Agent
-- Exports an Agent that manages the different components and processes that make up the services(replicator, membership, log, and server).
-- We can just use the Agent to boot up the whole service instead of having to configuring each components.
+- Exports an **Agent** that manages the different components and processes that make up the services (*membership*, *log/distributed log*, and *server*).
+- We can just use the **Agent** to boot up the whole service instead of having to configuring each components.
 
 ## TODO
 + Understand gommap
 + Understand enc ?
-+ Understand os.Truncate
-+ Understand TLS and CA cert
-+ Understand Casbin
-+ Understand Serf
-+ Review server implementation and add to README
++ Read more on Casbin
++ Read more on Serf
++ Read more on Raft
++ Read more on CMUX
