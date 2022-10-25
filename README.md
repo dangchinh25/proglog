@@ -43,6 +43,8 @@ E.g: if we have 2 entry entry0 and entry1, each consists of 8bytes. Then entry0 
 ### Agent
 - Exports an **Agent** that manages the different components and processes that make up the services (*membership*, *log/distributed log*, and *server*).
 - We can just use the **Agent** to boot up the whole service instead of having to configuring each components.
+- Each **Agent** will contain a *multiplexer* to distinguish between **Raft** request and **gRPC** request.
+- Each **Agent** will contain only 1 combination of *Serf membership*, *distributed log/Raft*, and *server*. Multiple **Agents** create a *cluster* in which *Serf* and *Raft* show its effect.
 
 ## TODO
 + Understand gommap
@@ -50,4 +52,5 @@ E.g: if we have 2 entry entry0 and entry1, each consists of 8bytes. Then entry0 
 + Read more on Casbin
 + Read more on Serf
 + Read more on Raft
-+ Read more on CMUX
++ Read more on CMUX (what is the difference between Raft and gRPC request, when does each get called?)
++ Read more on GPRC's Resolver and Picker
