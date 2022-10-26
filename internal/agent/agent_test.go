@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	api "dangchinh25/proglog/api/v1"
 	"dangchinh25/proglog/internal/config"
+	"dangchinh25/proglog/internal/loadbalance"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -91,6 +92,8 @@ func TestAgent(t *testing.T) {
 		},
 	)
 	require.NoError(t, err)
+	// wait until replicataion has finished
+	time.Sleep(3 * time.Second)
 	consumeResponse, err := leaderClient.Consume(
 		context.Background(),
 		&api.ConsumeRequest{
@@ -99,8 +102,7 @@ func TestAgent(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.Equal(t, consumeResponse.Record.Value, []byte("foo"))
-	// wait until replicataion has finished
-	time.Sleep(3 * time.Second)
+
 	// test that another node replicated the record
 	followerClient := client(t, agents[1], peerTLSConfig)
 	consumeResponse, err = followerClient.Consume(
@@ -132,7 +134,7 @@ func client(t *testing.T, agent *Agent, tlsConfig *tls.Config) api.LogClient {
 	opts := []grpc.DialOption{grpc.WithTransportCredentials(tlsCreds)}
 	rpcAddr, err := agent.Config.RPCAddr()
 	require.NoError(t, err)
-	conn, err := grpc.Dial(fmt.Sprintf("%s", rpcAddr), opts...)
+	conn, err := grpc.Dial(fmt.Sprintf("%s:///%s", loadbalance.Name, rpcAddr), opts...)
 	require.NoError(t, err)
 	client := api.NewLogClient(conn)
 	return client

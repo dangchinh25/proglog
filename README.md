@@ -17,7 +17,7 @@ E.g: if we have 2 entry entry0 and entry1, each consists of 8bytes. Then entry0 
     - **Segment** is an abstraction around **Store** and **Index**, each **Segment** only have 1 pair of **Store** and **Index**. Whenever we need to interact(create/append/read/delete/etc) with **Store** and **Index**, we can use the **Segment** so that we only have to interact with 1 entity instead of 2.
     - **Log** manages a list of **Segments**, consist of a list of *old segment* and 1 *active segment* where data is actively being written to. When the **Store** or **Index** that the active segment manages is full (reach the pre-configured size), the **Log** will handle create a new **Segment**(with new **Store** and **Index**) and assign that new one as the *active segment* while the previous one got pushed into the list of *old segment*. Each **Segment** holds a varible *baseOffset* where the **Log** can use to determine which **Segment** to read from.
 
-<img src="./asset/log.svg">
+<img src="./asset/commit-log.png">
 
 ### Server
 
@@ -27,7 +27,7 @@ E.g: if we have 2 entry entry0 and entry1, each consists of 8bytes. Then entry0 
 - Each Serf instace uses the *startJoinAddrs* to determine which cluster to join.
 - Every instance in the cluster knows about the current state of the cluster (number of current working instance, which instance just joined/left, etc) at all times.
 - The below flow demonstrate the flow used in [unit test](./internal//discovery//membership_test.go).
-<img src="./asset/membership.svg">
+<img src="./asset/membership.png">
 
 ### Raft/Distributed Log
 - We use **Raft** to create a *leader/follower* relationship between multiple servers.
@@ -35,7 +35,7 @@ E.g: if we have 2 entry entry0 and entry1, each consists of 8bytes. Then entry0 
      - All the follower will just replicate/store the request received from the leader without doing any actual work.
      - When the leader is lost, all the follower will start a leader election process to vote a new leader.
 - We create a **DistributedLog** components that wraps around our **CommitLog** and **Raft**.
-<img src="./asset/distributed.svg">
+<img src="./asset/distributed.png">
 - There more components in **Raft** such as *Snapshot*, *StableStore*, *StreamLayer*, *Transport* but the diagram only depicts the main execution flow (this is what happens during the *raft.Apply()* method).
 - The **DistributedLog** component also acts a *Serf handler*, which implements the *Join* and *Leave* method, [here](./internal/log/distributed.go).
     - So whenever **Serf** receives a *Join* event telling that a new node just joined the cluster, it will notify back to **Raft** to start the *leader election* and *log replication* process. 
@@ -45,6 +45,9 @@ E.g: if we have 2 entry entry0 and entry1, each consists of 8bytes. Then entry0 
 - We can just use the **Agent** to boot up the whole service instead of having to configuring each components.
 - Each **Agent** will contain a *multiplexer* to distinguish between **Raft** request and **gRPC** request.
 - Each **Agent** will contain only 1 combination of *Serf membership*, *distributed log/Raft*, and *server*. Multiple **Agents** create a *cluster* in which *Serf* and *Raft* show its effect.
+<img src="./asset/high-level.png">
+- The *log* in this diagram refers to the **Distributed Log**.
+- The diagram shows the high level architecture with 1 *Leader* instance and 2 *Follower* instances and how each component in **Agent** works together and with other **Agent** instances.
 
 ## TODO
 + Understand gommap
